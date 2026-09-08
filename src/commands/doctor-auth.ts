@@ -404,6 +404,7 @@ function loadAuthProfileHealth(params: {
           ([profileId, local]) =>
             local.type !== "oauth" ||
             !shouldUseMainOwnerForLocalOAuthCredential({
+              profileId,
               local,
               main: findPersistedAuthProfileCredential({ profileId }),
             }),
