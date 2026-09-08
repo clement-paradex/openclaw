@@ -128,6 +128,7 @@ export const en: TranslationMap & {
     colorMode: "Color mode",
     colorModeOption: "Color mode: {mode}",
     search: "Search",
+    pickerNoMatches: "No matches",
     save: "Save",
     saving: "Saving…",
     saveAndPublish: "Save & Publish",
@@ -944,6 +945,8 @@ export const en: TranslationMap & {
     gatewayNamed: "Gateway · {name}",
     cloudWorker: "Cloud · {profile}",
     cloudWorkerMachine: "{profile} · {machine}",
+    cloudWorkerOsMachine: "{profile} · {os} · {machine}",
+    cloudWorkerOs: "{profile} · {os}",
     cloudWorkerProvider: "Cloud worker provider: {provider}",
     cloudRuntimeUnsupported: "The {runtime} runtime does not support cloud workers.",
     cloudProfileRuntimeUnsupported:
@@ -992,6 +995,7 @@ export const en: TranslationMap & {
     registerProject: "Register as project",
     cloud: "Cloud",
     machine: "Machine",
+    operatingSystem: "Operating system",
     machineShape: "{cpu} vCPU · {memory} GB",
     machineCpu: "{cpu} vCPU",
     machineMemory: "{memory} GB",
@@ -2270,6 +2274,7 @@ export const en: TranslationMap & {
     uploadTooLarge: "File exceeds the 16 MiB terminal upload limit: {file}",
     uploadUnsafeCmdPath: "Cannot safely insert an uploaded path containing % or ! into cmd.exe",
     uploadUnsupportedShell: "Cannot safely insert an uploaded path into unsupported shell: {shell}",
+    uploadInvalidNativePath: "Cannot safely insert the uploaded native file path",
   },
   browser: {
     nativeTab: "Mac tab",
@@ -3253,7 +3258,7 @@ export const en: TranslationMap & {
     workerDesktop: {
       title: "Cloud Worker Desktop",
       description:
-        "Watch and control node-carried desktops from capable Crabbox AWS or Hetzner profiles with desktop: true.",
+        "Watch and control node-carried desktops from capable Crabbox AWS, Azure, or Hetzner profiles with desktop: true.",
     },
   },
   aboutPage: {
@@ -5380,6 +5385,7 @@ export const en: TranslationMap & {
         "This model can chat, but it cannot use tools. Choose another model for files, commands, web, or media tasks.",
       loadingModels: "Loading models…",
       modelsUnavailable: "Models unavailable",
+      modelsRefreshFailed: "Some models could not be refreshed. Open Models to try again.",
       noModelsAvailable: "No models available",
       emptyModelsAction: "Manage models",
       providerModels: "{provider} models",
