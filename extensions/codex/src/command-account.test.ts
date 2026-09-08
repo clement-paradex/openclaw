@@ -64,3 +64,61 @@ describe("Codex account workspace identity", () => {
     expect(safeCodexControlRequest).not.toHaveBeenCalled();
   });
 });
+
+describe("Codex account inactive profile status", () => {
+  const now = Date.now();
+  const blockedStore = {
+    version: 1,
+    profiles: {
+      "openai:personal": {
+        type: "oauth",
+        provider: "openai",
+        access: "personal-access",
+        refresh: "personal-refresh",
+        expires: now + 60_000,
+        email: "personal@example.test",
+        displayName: "Personal",
+      },
+      "openai:work": {
+        type: "oauth",
+        provider: "openai",
+        access: "work-access",
+        refresh: "work-refresh",
+        expires: now + 60_000,
+        email: "work@example.test",
+        displayName: "Work",
+      },
+    },
+    order: { openai: ["openai:personal", "openai:work"] },
+    lastGood: { openai: "openai:work" },
+    usageStats: {
+      "openai:personal": { blockedUntil: now + 30 * 60_000 },
+    },
+  };
+
+  async function readInactiveStatus(config: Record<string, unknown>) {
+    authMocks.ensureAuthProfileStore.mockReturnValue(structuredClone(blockedStore));
+    const overview = await readCodexAccountAuthOverview({
+      ctx: { config } as never,
+      agentDir: "/tmp/openclaw-agent",
+      pluginConfig: {},
+      safeCodexControlRequest: vi.fn(),
+      account: {
+        ok: true,
+        value: { account: { type: "chatgpt", email: "work@example.test" } },
+      },
+      limits: { ok: true, value: {} },
+    });
+    return overview?.rows.find((row) => row.profileId === "openai:personal")?.status;
+  }
+
+  it("reports a stored rate-limit block for a provider that keeps cooldowns", async () => {
+    await expect(readInactiveStatus({})).resolves.toMatch(/^rate-limited - resets /);
+  });
+
+  it("ignores a stored rate-limit block for a configured bypass provider", async () => {
+    await expect(
+      readInactiveStatus({ auth: { cooldownBypassProviders: ["openai"] } }),
+    ).resolves.toBe("available if needed");
+  });
+});

@@ -201,6 +201,10 @@ Some upstream gateways manage their own rate limiting, so OpenClaw skips cooldow
 
 Provider ids are matched case-insensitively and are added to the built-in set.
 
+The bypass is gateway-wide and covers every failure category OpenClaw would otherwise record against the profile: rate limits (`rate_limit`, `overloaded`), rate-limit-shaped timeouts (`timeout`), billing failures (`billing`), credential failures (`auth`, `auth_permanent`), and the remaining transient reasons (`format`, `model_not_found`, `session_expired`, `empty_response`, `no_error_details`, `unclassified`). Provider-reported blocks (for example Codex rate-limit windows) and inline API-key billing cooldowns are skipped for the same providers. Existing stored cooldown, block, or disable state for a bypassed provider is ignored by routing and by `openclaw models status`, `openclaw models auth list`, and `openclaw doctor`. Only add a provider here when its upstream gateway really does own rate limiting and account health; otherwise a failing credential is retried on every turn.
+
+Plugin and SDK callers opt into the configured set by passing the loaded config to the auth-profile helpers (`isProfileInCooldown`, `resolveProfileUnusableUntilForDisplay`, `markAuthProfileFailure`, `markAuthProfileBlockedUntil`, and related helpers). Callers that omit the config keep the built-in OpenRouter and Kilocode bypass only.
+
 CLI-backed runtimes settle profile health only after their resume, fork, and fresh-session recovery attempts finish. A terminal credential failure cools down the exact selected profile before model fallback; a successful run clears stale failure state. Transcript, format, context, pre-provider timeout, and ambient CLI failures without a selected profile do not change shared profile health.
 
 <AccordionGroup>
