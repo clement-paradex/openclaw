@@ -1,4 +1,5 @@
 // Discord tests cover auto presence plugin behavior.
+import type { OpenClawConfig } from "openclaw/plugin-sdk/config-contracts";
 import type { AuthProfileStore } from "openclaw/plugin-sdk/provider-auth";
 import { describe, expect, it, vi } from "vitest";
 import { createDiscordAutoPresenceController } from "./auto-presence.js";
@@ -51,6 +52,34 @@ describe("discord auto presence", () => {
         activities: [expect.objectContaining({ state: "token exhausted" })],
       }),
     );
+  });
+
+  it("re-reads the config on each evaluation so a hot-reloaded bypass clears exhaustion", () => {
+    let now = Date.now();
+    // Cooldown outlives the clock advance below so only the bypass can clear it.
+    const store = createStore({
+      cooldownUntil: now + 10 * 60_000,
+      failureCounts: { rate_limit: 2 },
+    });
+    const updatePresence = vi.fn();
+    let config: OpenClawConfig = {};
+    const controller = createDiscordAutoPresenceController({
+      accountId: "default",
+      discordConfig: { autoPresence: { enabled: true } },
+      gateway: { isConnected: true, updatePresence },
+      readConfig: () => config,
+      loadAuthStore: () => store,
+      now: () => now,
+    });
+
+    controller.runNow();
+    expect(updatePresence).toHaveBeenLastCalledWith(expect.objectContaining({ status: "dnd" }));
+
+    config = { auth: { cooldownBypassProviders: ["openai"] } };
+    now += 61_000;
+    controller.runNow();
+    expect(updatePresence).toHaveBeenLastCalledWith(expect.objectContaining({ status: "online" }));
+    expect(updatePresence).toHaveBeenCalledTimes(2);
   });
 
   it("reports degraded availability when no auth profiles exist", () => {

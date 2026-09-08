@@ -203,7 +203,8 @@ export function createDiscordAutoPresenceController(params: {
     "autoPresence" | "activity" | "status" | "activityType" | "activityUrl"
   >;
   gateway: PresenceGateway;
-  cfg?: OpenClawConfig;
+  /** Read on every evaluation so hot-reloaded auth policy reaches presence without a restart. */
+  readConfig?: () => OpenClawConfig;
   loadAuthStore?: () => AuthProfileStore;
   now?: () => number;
   log?: (message: string) => void;
@@ -234,7 +235,7 @@ export function createDiscordAutoPresenceController(params: {
         authStore: loadAuthStore(),
         gatewayConnected: params.gateway.isConnected,
         now: now(),
-        cfg: params.cfg,
+        cfg: params.readConfig?.(),
       });
     } catch (err) {
       params.log?.(
