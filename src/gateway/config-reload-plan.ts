@@ -258,6 +258,7 @@ const DEFAULT_RELOAD_POLICIES: ReloadPolicy[] = [
       "approvals.plugin",
       "auth.order",
       "auth.profiles",
+      "auth.cooldownBypassProviders",
       "broadcast",
       "memory.citations",
       "worktreeRoot",
