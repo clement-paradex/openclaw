@@ -92,7 +92,6 @@ function createDiscordStatusReadyListener(params: {
 
 export async function createDiscordMonitorClient(params: {
   accountId: string;
-  readConfig?: () => OpenClawConfig;
   applicationId: string;
   token: string;
   restFetch?: typeof fetch;
@@ -171,7 +170,6 @@ export async function createDiscordMonitorClient(params: {
   if (gateway) {
     autoPresenceController = params.createAutoPresenceController({
       accountId: params.accountId,
-      readConfig: params.readConfig,
       discordConfig: params.discordConfig,
       gateway,
       log: (message) => params.runtime.log?.(message),

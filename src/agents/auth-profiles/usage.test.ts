@@ -34,7 +34,22 @@ const storeMocks = vi.hoisted(() => ({
   updateAuthProfileStoreWithLock: vi.fn().mockResolvedValue(null),
 }));
 const fetchMock = vi.hoisted(() => vi.fn());
+// Provider availability ownership is a plugin declaration; this focused suite
+// pins the bundled gateway providers and lets cases opt others in.
+const availabilityMocks = vi.hoisted(() => {
+  const managedProviders = new Set(["openrouter", "kilocode"]);
+  return {
+    managedProviders,
+    resolveProviderManagesOwnAvailability: vi.fn(
+      (params: { provider: string | undefined }) =>
+        params.provider !== undefined && managedProviders.has(params.provider),
+    ),
+  };
+});
 
+vi.mock("../../plugins/provider-availability-policy.js", () => ({
+  resolveProviderManagesOwnAvailability: availabilityMocks.resolveProviderManagesOwnAvailability,
+}));
 vi.mock("./store.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./store.js")>()),
   resolvePersistedAuthProfileOwnerAgentDir: storeMocks.resolvePersistedAuthProfileOwnerAgentDir,
@@ -60,6 +75,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  availabilityMocks.managedProviders.delete("anthropic");
   authProfileUsageTesting.setDepsForTest(null);
   authProfileUsageTesting.resetWhamReprobeStateForTest();
   vi.unstubAllGlobals();
@@ -198,55 +214,48 @@ describe("account-wide auth profile cooldowns", () => {
   });
 });
 
-describe("isAuthCooldownBypassedForProvider", () => {
-  it("adds normalized configured providers to the built-in set", () => {
-    const cfg = { auth: { cooldownBypassProviders: [" My-Gateway ", "", "anthropic"] } };
-
-    expect(isAuthCooldownBypassedForProvider("my-gateway", cfg)).toBe(true);
-    expect(isAuthCooldownBypassedForProvider("ANTHROPIC", cfg)).toBe(true);
-    expect(isAuthCooldownBypassedForProvider("openrouter", cfg)).toBe(true);
-    expect(isAuthCooldownBypassedForProvider("openai", cfg)).toBe(false);
-    expect(isAuthCooldownBypassedForProvider("", cfg)).toBe(false);
-  });
-
-  it("keeps the built-in set without config", () => {
-    expect(isAuthCooldownBypassedForProvider("kilocode")).toBe(true);
-    expect(isAuthCooldownBypassedForProvider("anthropic")).toBe(false);
-  });
-});
-
-describe("configured auth cooldown bypass providers", () => {
-  const cfg: OpenClawConfig = { auth: { cooldownBypassProviders: ["Anthropic"] } };
+describe("providers that manage their own availability", () => {
   const now = 1_700_000_000_000;
 
-  it("treats a configured provider as never in cooldown", () => {
+  it("asks the plugin policy for the normalized provider id", () => {
+    expect(isAuthCooldownBypassedForProvider("kilocode")).toBe(true);
+    expect(isAuthCooldownBypassedForProvider("anthropic")).toBe(false);
+    expect(isAuthCooldownBypassedForProvider(undefined)).toBe(false);
+    expect(availabilityMocks.resolveProviderManagesOwnAvailability).toHaveBeenCalledWith({
+      provider: "kilocode",
+    });
+  });
+
+  it("treats a declaring provider as never in cooldown", () => {
+    availabilityMocks.managedProviders.add("anthropic");
     const store = makeStore({
       "anthropic:default": { cooldownUntil: now + 60_000, disabledUntil: now + 60_000 },
     });
 
-    expect(isProfileInCooldown(store, "anthropic:default", now, undefined, cfg)).toBe(false);
+    expect(isProfileInCooldown(store, "anthropic:default", now)).toBe(false);
+    expect(resolveProfileUnusableUntilForDisplay(store, "anthropic:default")).toBeNull();
+
+    availabilityMocks.managedProviders.delete("anthropic");
     expect(isProfileInCooldown(store, "anthropic:default", now)).toBe(true);
-    expect(resolveProfileUnusableUntilForDisplay(store, "anthropic:default", cfg)).toBeNull();
     expect(resolveProfileUnusableUntilForDisplay(store, "anthropic:default")).toBe(now + 60_000);
   });
 
-  it("skips failure bookkeeping for a configured provider", async () => {
+  it("skips failure bookkeeping for a declaring provider", async () => {
+    availabilityMocks.managedProviders.add("anthropic");
     const store = makeStore(undefined);
 
     await markAuthProfileFailure({
       store,
       profileId: "anthropic:default",
       reason: "rate_limit",
-      cfg,
     });
     await markAuthProfileBlockedUntil({
       store,
       profileId: "anthropic:default",
       blockedUntil: now + 60_000,
       source: "codex_rate_limits",
-      cfg,
     });
-    await markInlineProviderApiKeyFailure({ store, provider: "anthropic", reason: "billing", cfg });
+    await markInlineProviderApiKeyFailure({ store, provider: "anthropic", reason: "billing" });
 
     expect(store.usageStats).toBeUndefined();
     expect(storeMocks.updateAuthProfileStoreWithLock).not.toHaveBeenCalled();

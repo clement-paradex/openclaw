@@ -387,7 +387,7 @@ export async function prepareEmbeddedRunRuntime(input: {
       const candidate = candidateAttempt.profileId;
       if (
         candidate &&
-        isProfileInCooldown(attemptAuthProfileStore, candidate, undefined, modelId, params.config)
+        isProfileInCooldown(attemptAuthProfileStore, candidate, undefined, modelId)
       ) {
         if (didTransientCooldownProbe || !cooldownProbePolicy.probeProfileIds.has(candidate)) {
           continue;
@@ -442,13 +442,7 @@ export async function prepareEmbeddedRunRuntime(input: {
     const initialAttempt = preparedAuthAttempts[authState.profileIndex];
     const initialProfileInCooldown =
       initialAttempt?.kind === "profile" &&
-      isProfileInCooldown(
-        attemptAuthProfileStore,
-        initialAttempt.profileId,
-        undefined,
-        modelId,
-        params.config,
-      );
+      isProfileInCooldown(attemptAuthProfileStore, initialAttempt.profileId, undefined, modelId);
     const initialProfileId = initialAttempt?.profileId;
     const canProbeInitialProfile =
       initialProfileInCooldown &&

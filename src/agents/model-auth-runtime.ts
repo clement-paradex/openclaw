@@ -164,7 +164,6 @@ function resolveRuntimeAvailableProviderAuth<T>(
         const unusableUntil = authConfig.resolveInlineProviderApiKeyCooldownUntil(
           params.store,
           provider,
-          params.cfg,
         );
         return unusableUntil === null || unusableUntil <= Date.now();
       })()

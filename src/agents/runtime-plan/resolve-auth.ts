@@ -1,4 +1,3 @@
-import type { OpenClawConfig } from "../../config/types.openclaw.js";
 /** Resolves credentials for an immutable prepared runtime route. */
 import { toErrorObject } from "../../infra/errors.js";
 import { SecretSurfaceUnavailableError } from "../../secrets/runtime-degraded-state.js";
@@ -55,7 +54,6 @@ export async function resolvePreparedRuntimeAuthAttempts<Model, Auth>(params: {
   attempts: readonly PreparedAgentRuntimeAuthAttempt[];
   store: AuthProfileStore;
   modelId: string;
-  cfg?: OpenClawConfig;
   model: Model;
   materializeModel(input: {
     plan: AgentRuntimeAuthPlan;
@@ -87,7 +85,6 @@ export async function resolvePreparedRuntimeAuthAttempts<Model, Auth>(params: {
         attempt,
         store: params.store,
         modelId: params.modelId,
-        config: params.cfg,
       })
     ) {
       firstError ??= new Error("Prepared runtime auth candidates are temporarily unavailable.");
@@ -112,7 +109,6 @@ export async function resolvePreparedRuntimeAuthAttempts<Model, Auth>(params: {
           attempt,
           store: params.store,
           modelId: params.modelId,
-          config: params.cfg,
         })
       ) {
         throw new Error("Prepared runtime auth candidates are temporarily unavailable.");
@@ -304,8 +300,7 @@ export async function resolvePreparedRuntimeModelAuth(
   const store = params.store;
   const currentCandidates = store
     ? candidates.filter(
-        (profileId) =>
-          !isProfileInCooldown(store, profileId, undefined, params.model.id, params.cfg),
+        (profileId) => !isProfileInCooldown(store, profileId, undefined, params.model.id),
       )
     : candidates;
   if (currentCandidates.length === 0) {

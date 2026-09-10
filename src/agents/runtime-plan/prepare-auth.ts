@@ -117,7 +117,6 @@ export function preparedAgentRuntimeProfileAttemptHasCandidate(params: {
   attempt: PreparedAgentRuntimeAuthAttempt;
   store: AuthProfileStore;
   modelId: string;
-  config?: OpenClawConfig;
 }): boolean {
   if (params.attempt.kind !== "profile") {
     return false;
@@ -126,8 +125,7 @@ export function preparedAgentRuntimeProfileAttemptHasCandidate(params: {
     params.attempt.profileId,
   ];
   return profileIds.some(
-    (profileId) =>
-      !isProfileInCooldown(params.store, profileId, undefined, params.modelId, params.config),
+    (profileId) => !isProfileInCooldown(params.store, profileId, undefined, params.modelId),
   );
 }
 
@@ -172,13 +170,7 @@ function resolveProfile(
     cooldown:
       !options.ignoreCooldown &&
       params.authProfileStore &&
-      isProfileInCooldown(
-        params.authProfileStore,
-        profileId,
-        undefined,
-        params.modelId,
-        params.config,
-      )
+      isProfileInCooldown(params.authProfileStore, profileId, undefined, params.modelId)
         ? "active"
         : "clear",
   };
@@ -209,9 +201,7 @@ function resolvePreparedProviderEntryApiKeyProfileReference(
       `Per-entry apiKey profile "${reference.profileId}" has no usable credentials for ${params.provider}.`,
     );
   }
-  if (
-    isProfileInCooldown(params.store, reference.profileId, undefined, params.modelId, params.config)
-  ) {
+  if (isProfileInCooldown(params.store, reference.profileId, undefined, params.modelId)) {
     throw new Error(
       `Auth profile "${reference.profileId}" is temporarily unavailable for ${params.provider}/${params.modelId}.`,
     );

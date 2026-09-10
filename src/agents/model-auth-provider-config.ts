@@ -572,22 +572,16 @@ export function isConfigBackedInlineProviderApiKey(params: {
 export function resolveInlineProviderApiKeyCooldownUntil(
   store: AuthProfileStore,
   provider: string,
-  cfg?: OpenClawConfig,
 ): number | null {
-  return readInlineProviderApiKeyUsage(store, provider, cfg).unusableUntil;
+  return readInlineProviderApiKeyUsage(store, provider).unusableUntil;
 }
 
 /** Fails closed while an inline provider API key is inside its billing/auth cooldown. */
 export function assertInlineProviderApiKeyUsable(params: {
   store: AuthProfileStore;
   provider: string;
-  cfg?: OpenClawConfig;
 }): void {
-  const unusableUntil = resolveInlineProviderApiKeyCooldownUntil(
-    params.store,
-    params.provider,
-    params.cfg,
-  );
+  const unusableUntil = resolveInlineProviderApiKeyCooldownUntil(params.store, params.provider);
   if (typeof unusableUntil !== "number" || unusableUntil <= Date.now()) {
     return;
   }

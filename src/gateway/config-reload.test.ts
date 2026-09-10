@@ -638,7 +638,6 @@ describe("buildGatewayReloadPlan", () => {
     "approvals.plugin.targets",
     "auth.order.openai",
     "auth.profiles.primary.mode",
-    "auth.cooldownBypassProviders",
     "broadcast.strategy",
     "memory.citations",
     "worktreeRoot",

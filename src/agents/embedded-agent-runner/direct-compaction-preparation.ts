@@ -218,7 +218,6 @@ export async function prepareDirectCompactionAttempt(
     resolvePreparedRuntimeAuthAttempts({
       attempts: runtimeAuthPreparation.attempts,
       store: runtimeAuthProfileStore,
-      cfg: params.config,
       modelId,
       model,
       materializeModel: materializeAuthAttemptModel,

@@ -2,12 +2,20 @@ import { describe, expect, it, vi } from "vitest";
 
 const authMocks = vi.hoisted(() => ({
   ensureAuthProfileStore: vi.fn(),
+  resolveProfileUnusableUntilForDisplay: vi.fn(),
 }));
 
-vi.mock("openclaw/plugin-sdk/agent-runtime", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("openclaw/plugin-sdk/agent-runtime")>()),
-  ensureAuthProfileStore: authMocks.ensureAuthProfileStore,
-}));
+vi.mock("openclaw/plugin-sdk/agent-runtime", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("openclaw/plugin-sdk/agent-runtime")>();
+  authMocks.resolveProfileUnusableUntilForDisplay.mockImplementation(
+    actual.resolveProfileUnusableUntilForDisplay,
+  );
+  return {
+    ...actual,
+    ensureAuthProfileStore: authMocks.ensureAuthProfileStore,
+    resolveProfileUnusableUntilForDisplay: authMocks.resolveProfileUnusableUntilForDisplay,
+  };
+});
 
 import { readCodexAccountAuthOverview } from "./command-account.js";
 
@@ -96,10 +104,10 @@ describe("Codex account inactive profile status", () => {
     },
   };
 
-  async function readInactiveStatus(config: Record<string, unknown>) {
+  async function readInactiveStatus() {
     authMocks.ensureAuthProfileStore.mockReturnValue(structuredClone(blockedStore));
     const overview = await readCodexAccountAuthOverview({
-      ctx: { config } as never,
+      ctx: { config: {} } as never,
       agentDir: "/tmp/openclaw-agent",
       pluginConfig: {},
       safeCodexControlRequest: vi.fn(),
@@ -113,12 +121,17 @@ describe("Codex account inactive profile status", () => {
   }
 
   it("reports a stored rate-limit block for a provider that keeps cooldowns", async () => {
-    await expect(readInactiveStatus({})).resolves.toMatch(/^rate-limited - resets /);
+    await expect(readInactiveStatus()).resolves.toMatch(/^rate-limited - resets /);
   });
 
-  it("ignores a stored rate-limit block for a configured bypass provider", async () => {
-    await expect(
-      readInactiveStatus({ auth: { cooldownBypassProviders: ["openai"] } }),
-    ).resolves.toBe("available if needed");
+  it("follows the display resolver when it reports the blocked profile usable", async () => {
+    // A provider that manages its own availability makes the resolver return
+    // null; the status must agree with routing rather than read the raw block.
+    authMocks.resolveProfileUnusableUntilForDisplay.mockReturnValue(null);
+    try {
+      await expect(readInactiveStatus()).resolves.toBe("available if needed");
+    } finally {
+      authMocks.resolveProfileUnusableUntilForDisplay.mockReset();
+    }
   });
 });

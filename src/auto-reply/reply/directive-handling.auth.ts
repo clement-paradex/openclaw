@@ -162,7 +162,7 @@ export const resolveAuthLabel = async (
       if (lastGood && profileId === lastGood) {
         flags.push("lastGood");
       }
-      if (isProfileInCooldown(store, profileId, undefined, undefined, cfg)) {
+      if (isProfileInCooldown(store, profileId)) {
         const until = store.usageStats?.[profileId]?.cooldownUntil;
         if (typeof until === "number" && Number.isFinite(until) && until > now) {
           flags.push(`cooldown ${formatUntil(until)}`);

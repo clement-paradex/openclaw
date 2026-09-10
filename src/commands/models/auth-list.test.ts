@@ -29,6 +29,11 @@ vi.mock("../../agents/auth-profiles.js", () => ({
   resolveAuthStatePathForDisplay: mocks.resolveAuthStatePathForDisplay,
 }));
 
+vi.mock("../../plugins/provider-availability-policy.js", () => ({
+  resolveProviderManagesOwnAvailability: ({ provider }: { provider: string | undefined }) =>
+    provider === "my-gateway",
+}));
+
 vi.mock("./load-config.js", () => ({
   loadModelsConfig: mocks.loadModelsConfig,
 }));
@@ -169,10 +174,7 @@ describe("modelsAuthListCommand", () => {
     });
   });
 
-  it("hides cooldown markers for a configured cooldown bypass provider", async () => {
-    mocks.loadModelsConfig.mockResolvedValue({
-      auth: { cooldownBypassProviders: ["my-gateway"] },
-    } as OpenClawConfig);
+  it("hides cooldown markers for a provider that manages its own availability", async () => {
     mocks.ensureAuthProfileStore.mockReturnValue({
       version: 1,
       profiles: {

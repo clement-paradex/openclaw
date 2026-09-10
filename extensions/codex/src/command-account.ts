@@ -265,14 +265,10 @@ function resolveActiveProfileId(params: {
 }
 
 function isActiveProfileCandidate(
-  params: { store: AuthProfileStore; now: number; config: AuthProfileOrderConfig },
+  params: { store: AuthProfileStore; now: number },
   profileId: string,
 ): boolean {
-  const unusableUntil = resolveProfileUnusableUntilForDisplay(
-    params.store,
-    profileId,
-    params.config,
-  );
+  const unusableUntil = resolveProfileUnusableUntilForDisplay(params.store, profileId);
   return !isActiveUntil(unusableUntil ?? undefined, params.now);
 }
 
@@ -405,14 +401,11 @@ function describeInactiveProfileStatus(params: {
   afterActive: boolean;
 }): string {
   const stats = params.store.usageStats?.[params.profileId];
-  // The display resolver owns the provider bypass policy and already folds
-  // blockedUntil into the window; a bypassed provider must not read the stored
-  // block directly or the status disagrees with routing.
-  const unusableUntil = resolveProfileUnusableUntilForDisplay(
-    params.store,
-    params.profileId,
-    params.config,
-  );
+  // The display resolver owns the provider availability policy and already
+  // folds blockedUntil into the window; a provider that manages its own
+  // availability must not read the stored block directly or the status
+  // disagrees with routing.
+  const unusableUntil = resolveProfileUnusableUntilForDisplay(params.store, params.profileId);
   if (isActiveUntil(unusableUntil ?? undefined, params.now)) {
     const blockedUntil = stats?.blockedUntil;
     if (isActiveUntil(blockedUntil, params.now)) {

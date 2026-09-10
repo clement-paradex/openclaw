@@ -10,7 +10,6 @@ import {
 import type {
   DiscordAccountConfig,
   DiscordAutoPresenceConfig,
-  OpenClawConfig,
 } from "openclaw/plugin-sdk/config-contracts";
 import { warn } from "openclaw/plugin-sdk/runtime-env";
 import type { Activity, UpdatePresenceData } from "../internal/gateway.js";
@@ -88,7 +87,6 @@ function isExhaustedUnavailableReason(reason: AuthProfileFailureReason | null): 
 function resolveAuthAvailability(params: {
   store: AuthProfileStore;
   now: number;
-  cfg?: OpenClawConfig;
 }): DiscordAutoPresenceState {
   const profileIds = Object.keys(params.store.profiles);
   if (profileIds.length === 0) {
@@ -98,7 +96,7 @@ function resolveAuthAvailability(params: {
   clearExpiredCooldowns(params.store, params.now);
 
   const hasUsableProfile = profileIds.some(
-    (profileId) => !isProfileInCooldown(params.store, profileId, params.now, undefined, params.cfg),
+    (profileId) => !isProfileInCooldown(params.store, profileId, params.now),
   );
   if (hasUsableProfile) {
     return "healthy";
@@ -144,7 +142,6 @@ function resolveDiscordAutoPresenceUpdate(params: {
   authStore: AuthProfileStore;
   gatewayConnected: boolean;
   now?: number;
-  cfg?: OpenClawConfig;
 }): UpdatePresenceData | null {
   const autoPresence = resolveAutoPresenceConfig(params.discordConfig.autoPresence);
   if (!autoPresence.enabled) {
@@ -157,7 +154,6 @@ function resolveDiscordAutoPresenceUpdate(params: {
   const availability = resolveAuthAvailability({
     store: params.authStore,
     now,
-    cfg: params.cfg,
   });
   const state = params.gatewayConnected ? availability : "degraded";
 
@@ -203,8 +199,6 @@ export function createDiscordAutoPresenceController(params: {
     "autoPresence" | "activity" | "status" | "activityType" | "activityUrl"
   >;
   gateway: PresenceGateway;
-  /** Read on every evaluation so hot-reloaded auth policy reaches presence without a restart. */
-  readConfig?: () => OpenClawConfig;
   loadAuthStore?: () => AuthProfileStore;
   now?: () => number;
   log?: (message: string) => void;
@@ -235,7 +229,6 @@ export function createDiscordAutoPresenceController(params: {
         authStore: loadAuthStore(),
         gatewayConnected: params.gateway.isConnected,
         now: now(),
-        cfg: params.readConfig?.(),
       });
     } catch (err) {
       params.log?.(

@@ -153,7 +153,7 @@ export async function modelsAuthListCommand(
         profileId,
         profile,
         // Provider-managed cooldowns are never enforced, so their markers stay hidden.
-        usage: isAuthCooldownBypassedForProvider(profile.provider, cfg)
+        usage: isAuthCooldownBypassedForProvider(profile.provider)
           ? undefined
           : store.usageStats?.[profileId],
       }),

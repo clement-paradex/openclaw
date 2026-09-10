@@ -138,11 +138,7 @@ export async function hasAvailableAuthForProvider(params: {
   // An inline provider key inside its billing/auth cooldown is not available
   // auth: the resolver refuses to hand it back, so reporting it as available
   // would strand callers on a credential they cannot use.
-  const inlineUnusableUntil = authConfig.resolveInlineProviderApiKeyCooldownUntil(
-    store,
-    provider,
-    cfg,
-  );
+  const inlineUnusableUntil = authConfig.resolveInlineProviderApiKeyCooldownUntil(store, provider);
   const inlineProviderApiKeyUsable =
     typeof inlineUnusableUntil !== "number" || inlineUnusableUntil <= Date.now();
   const envAuth = authConfig.resolveConfigAwareEnvApiKey(cfg, provider, params.workspaceDir);

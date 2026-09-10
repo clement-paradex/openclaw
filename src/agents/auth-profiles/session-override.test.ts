@@ -717,7 +717,6 @@ describe("resolveSessionAuthProfileOverride", () => {
           TEST_PRIMARY_PROFILE_ID,
           undefined,
           "model-y",
-          expect.anything(),
         );
       });
     },
