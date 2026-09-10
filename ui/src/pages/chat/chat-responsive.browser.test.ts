@@ -1721,7 +1721,7 @@ describeBrowserLayout.concurrent("chat responsive browser layout", () => {
     }
   });
 
-  it("insets only the bundled logo inside the unchanged avatar box", async () => {
+  it("insets only the bundled logo and keeps the user edge neutral", async () => {
     const page = await openBrowserPage(430, 720);
     try {
       await page.setContent(`<!doctype html><html><head><style>${readUiCss()}</style></head><body>
@@ -1771,6 +1771,38 @@ describeBrowserLayout.concurrent("chat responsive browser layout", () => {
           borderWidth: "1px",
         },
       ]);
+
+      for (const theme of ["dark", "light"]) {
+        const edge = await page.evaluate((mode) => {
+          document.documentElement.dataset.themeMode = mode;
+          const probe = document.createElement("span");
+          probe.style.border = "1px solid var(--border)";
+          document.body.append(probe);
+          const neutralColor = getComputedStyle(probe).borderTopColor;
+          probe.style.borderColor = "color-mix(in srgb, var(--accent) 20%, transparent)";
+          const accentColor = getComputedStyle(probe).borderTopColor;
+          const avatar = document.querySelector("img.chat-avatar.user");
+          if (!avatar) {
+            throw new Error("Expected user avatar fixture");
+          }
+          const avatarStyle = getComputedStyle(avatar);
+          const result = {
+            accentColor,
+            borderColor: avatarStyle.borderTopColor,
+            borderStyle: avatarStyle.borderTopStyle,
+            borderWidth: avatarStyle.borderTopWidth,
+            neutralColor,
+            outlineStyle: avatarStyle.outlineStyle,
+          };
+          probe.remove();
+          return result;
+        }, theme);
+        expect(edge.borderColor).toBe(edge.neutralColor);
+        expect(edge.borderColor).not.toBe(edge.accentColor);
+        expect(edge.borderStyle).toBe("solid");
+        expect(edge.borderWidth).toBe("1px");
+        expect(edge.outlineStyle).toBe("none");
+      }
     } finally {
       await closeBrowserPage(page);
     }
@@ -4306,27 +4338,49 @@ describeBrowserLayout.concurrent("chat responsive browser layout", () => {
         await page.locator(".agent-chat__input").evaluate((node) => {
           node.scrollTop = 0;
         });
-        const input = await getBoundingBox(
-          page,
-          ".agent-chat__composer-shell > .agent-chat__input",
+        // Ancestor entrance animations move these boxes together; compare one frame.
+        const { input, preview, attachment, remove, topHits, textStart } = await page.evaluate(
+          () => {
+            const elementFor = (selector: string) => {
+              const [element, ...others] = document.querySelectorAll(selector);
+              if (!element || others.length > 0) {
+                throw new Error(`Expected one layout element: ${selector}`);
+              }
+              return element;
+            };
+            const rectFor = (selector: string) => {
+              const {
+                x,
+                y,
+                width: rectWidth,
+                height: rectHeight,
+              } = elementFor(selector).getBoundingClientRect();
+              return { x, y, width: rectWidth, height: rectHeight };
+            };
+            const removeNode = elementFor(".chat-attachment-remove");
+            const removeRect = rectFor(".chat-attachment-remove");
+            const textarea = elementFor(".agent-chat__composer-combobox > textarea");
+            return {
+              input: rectFor(".agent-chat__composer-shell > .agent-chat__input"),
+              preview: rectFor(".chat-attachments-preview"),
+              attachment: rectFor(".chat-attachment-thumb"),
+              remove: removeRect,
+              topHits: [1, 3].map(
+                (offset) =>
+                  document.elementFromPoint(
+                    removeRect.x + removeRect.width / 2,
+                    removeRect.y + offset,
+                  ) === removeNode,
+              ),
+              textStart:
+                textarea.getBoundingClientRect().x +
+                Number.parseFloat(getComputedStyle(textarea).paddingLeft),
+            };
+          },
         );
-        const preview = await getBoundingBox(page, ".chat-attachments-preview");
-        const attachment = await getBoundingBox(page, ".chat-attachment-thumb");
-        const remove = await getBoundingBox(page, ".chat-attachment-remove");
-        const topHits = await page.locator(".chat-attachment-remove").evaluate((node) => {
-          const bounds = node.getBoundingClientRect();
-          return [1, 3].map(
-            (offset) =>
-              document.elementFromPoint(bounds.x + bounds.width / 2, bounds.y + offset) === node,
-          );
-        });
-        const textStart = await page
-          .locator(".agent-chat__composer-combobox > textarea")
-          .evaluate(
-            (node) =>
-              node.getBoundingClientRect().x +
-              Number.parseFloat(getComputedStyle(node).paddingLeft),
-          );
+        for (const rect of [input, preview, attachment, remove]) {
+          expectFiniteRect(rect);
+        }
 
         expect(attachment.x - input.x).toBeGreaterThanOrEqual(9.5);
         expect(Math.abs(attachment.x - textStart)).toBeLessThanOrEqual(0.5);
