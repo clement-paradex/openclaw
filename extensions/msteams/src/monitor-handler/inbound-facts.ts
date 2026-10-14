@@ -1,4 +1,3 @@
-// Msteams plugin module assembles stable inbound activity facts.
 import { serializeMSTeamsAdaptiveCardActionValue } from "../adaptive-card-submit.js";
 import {
   resolveMSTeamsAdvertisedMedia,
@@ -38,20 +37,13 @@ function extractTextFromHtmlAttachments(attachments: MSTeamsAttachmentLike[]): s
   return "";
 }
 
-export type MSTeamsDebounceEntry = {
-  context: MSTeamsTurnContext;
-  rawText: string;
-  text: string;
-  attachments: MSTeamsAttachmentLike[];
-  wasMentioned: boolean;
-  implicitMentionKinds: Array<"reply_to_bot">;
-  turnAdoptionLifecycle?: MSTeamsIngressLifecycle;
-};
+export type MSTeamsDebounceEntry = Awaited<ReturnType<typeof prepareMSTeamsDebounceEntry>>;
 
 export async function prepareMSTeamsDebounceEntry(params: {
   context: MSTeamsTurnContext;
+  accountId: string;
   turnAdoptionLifecycle?: MSTeamsIngressLifecycle;
-}): Promise<MSTeamsDebounceEntry> {
+}) {
   const activity = params.context.activity;
   const attachments: MSTeamsAttachmentLike[] = Array.isArray(activity.attachments)
     ? activity.attachments
@@ -67,7 +59,11 @@ export async function prepareMSTeamsDebounceEntry(params: {
   const implicitMentionKinds: Array<"reply_to_bot"> =
     conversationId &&
     replyToId &&
-    (await wasMSTeamsMessageSentWithPersistence({ conversationId, messageId: replyToId }))
+    (await wasMSTeamsMessageSentWithPersistence({
+      conversationId,
+      messageId: replyToId,
+      accountId: params.accountId,
+    }))
       ? ["reply_to_bot"]
       : [];
 
@@ -120,11 +116,7 @@ function buildStoredConversationReference(params: {
   };
 }
 
-export function assembleMSTeamsInboundFacts(params: {
-  entry: MSTeamsDebounceEntry;
-  mediaMaxBytes: number;
-}) {
-  const { entry, mediaMaxBytes } = params;
+export function assembleMSTeamsInboundFacts(entry: MSTeamsDebounceEntry) {
   const activity = entry.context.activity;
   const conversation = activity.conversation;
   const rawConversationId = conversation?.id ?? "";
@@ -136,10 +128,7 @@ export function assembleMSTeamsInboundFacts(params: {
   const threadId = isChannel
     ? (conversationMessageId ?? activity.replyToId ?? undefined)
     : undefined;
-  const advertisedMedia = resolveMSTeamsAdvertisedMedia(entry.attachments, {
-    maxInlineBytes: mediaMaxBytes,
-    maxInlineTotalBytes: mediaMaxBytes,
-  });
+  const advertisedMedia = resolveMSTeamsAdvertisedMedia(entry.attachments);
 
   return {
     ...entry,
@@ -164,6 +153,8 @@ export function assembleMSTeamsInboundFacts(params: {
     teamId,
     graphChannelId: activity.channelData?.channel?.id?.trim() || conversationId,
     threadId,
+    // Pending history must follow the channel thread through recording, reads, and cleanup.
+    historyKey: threadId ? `${conversationId}:thread:${threadId}` : conversationId,
     conversationRef: buildStoredConversationReference({
       activity,
       conversationId,

@@ -9,6 +9,7 @@ function context(activity: MSTeamsTurnContext["activity"]): MSTeamsTurnContext {
 describe("msteams inbound facts", () => {
   it("prefers activity text, then HTML, then adaptive-card values", async () => {
     const textEntry = await prepareMSTeamsDebounceEntry({
+      accountId: "default",
       context: context({
         type: "message",
         text: "  <at>Bot</at> hello &lt;tag&gt;  ",
@@ -17,12 +18,14 @@ describe("msteams inbound facts", () => {
       }),
     });
     const htmlEntry = await prepareMSTeamsDebounceEntry({
+      accountId: "default",
       context: context({
         type: "message",
         attachments: [{ contentType: "text/html", content: "<p>hello &amp; goodbye</p>" }],
       }),
     });
     const valueEntry = await prepareMSTeamsDebounceEntry({
+      accountId: "default",
       context: context({
         type: "message",
         value: { action: "approve", id: 7 },
@@ -47,6 +50,7 @@ describe("msteams inbound facts", () => {
     ],
   ])("preserves HTML text in the inbound body: %s", async (html, expected) => {
     const entry = await prepareMSTeamsDebounceEntry({
+      accountId: "default",
       context: context({
         type: "message",
         attachments: [{ contentType: "text/html", content: html }],
@@ -54,11 +58,12 @@ describe("msteams inbound facts", () => {
       }),
     });
 
-    expect(assembleMSTeamsInboundFacts({ entry, mediaMaxBytes: 1024 }).rawBody).toBe(expected);
+    expect(assembleMSTeamsInboundFacts(entry).rawBody).toBe(expected);
   });
 
   it("strips native mentions from card text when HTML has no visible text", async () => {
     const entry = await prepareMSTeamsDebounceEntry({
+      accountId: "default",
       context: context({
         type: "message",
         attachments: [{ contentType: "text/html", content: "<at>Bot</at>" }],
@@ -71,6 +76,7 @@ describe("msteams inbound facts", () => {
 
   it("preserves raw Bot Framework IDs while normalizing routing facts", async () => {
     const entry = await prepareMSTeamsDebounceEntry({
+      accountId: "default",
       context: context({
         type: "message",
         id: "message-1",
@@ -90,7 +96,7 @@ describe("msteams inbound facts", () => {
       }),
     });
 
-    const facts = assembleMSTeamsInboundFacts({ entry, mediaMaxBytes: 1024 });
+    const facts = assembleMSTeamsInboundFacts(entry);
 
     expect(facts.rawConversationId).toBe("19:channel@thread.tacv2;messageid=thread-root");
     expect(facts.conversationId).toBe("19:channel@thread.tacv2");

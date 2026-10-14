@@ -23,6 +23,24 @@ A transcript writer ownership error means the run lost its session write claim. 
 
 Use `openclaw logs --follow` to correlate the run with storage activity. SQLite can contend between connections or worker threads in one Gateway process; seeing only one process with the database open does not rule out contention. See [database concurrency notes](/reference/database-schemas#integrity-checks). Avoid full database compaction while runs are active.
 
+## Provider rejected the request
+
+A reply beginning with `LLM request rejected:` includes the provider's request-validation message. OpenClaw redacts credentials, bounds the diagnostic, and displays it as literal text rather than exposing the full response body. Known context, token-limit, and storage failures retain their specific recovery guidance.
+
+For `Invalid service_tier argument`, check the selected model and speed setting. A provider or account supporting Fast or Ultrafast does not mean every model supports that tier. Retry with Standard (`/fast off`) or select a model that supports the requested tier. This error alone does not mean the conversation is corrupt. See [OpenAI Fast mode](/providers/openai/advanced#fast-mode).
+
+## Connection to the AI service failed
+
+If a reply says OpenClaw could not connect to the AI service, check the provider connection. For a local model, confirm that its server is running and reachable at the configured URL. A server that stops during a turn can leave completed work in the conversation; check those results before retrying. Use `openclaw logs --follow` for connection diagnostics.
+
+## Unreadable conversation history
+
+If a reply says OpenClaw could not read the conversation's history, ask the Gateway operator to try `openclaw doctor --fix` on the host and profile that own the session. This notice also appears for unmentioned group turns when silent replies are allowed.
+
+Doctor can restore a missing header when the stored transcript entries already use the supported format. It does not repair every malformed or unsupported history. If the error persists, preserve the state and contact support with the Gateway logs; the history may need migration or recovery from a backup. Repeated `/new` or `/compact` commands do not repair a transcript that cannot be loaded.
+
+See [Doctor's session repairs](/gateway/doctor/state-and-sessions) and [running Doctor](/gateway/doctor/running).
+
 ## No replies
 
 If channels are up but nothing answers, check routing and policy before reconnecting anything.
@@ -47,15 +65,29 @@ Common signatures:
 - `pairing request` → sender needs approval.
 - `blocked` / `allowlist` → sender/channel was filtered by policy.
 
+A `Session delivery: entry <id> was dead-lettered and moved to failed` warning means a queued session delivery finished terminal cleanup and will not be replayed. Use the queue entry ID to correlate earlier logs, then check the conversation before retrying: an interrupted delivery may already have produced side effects. Batch recovery includes the finalized entry in its failure count.
+
 Related:
 
 - [Channel troubleshooting](/channels/troubleshooting)
 - [Groups](/channels/groups)
 - [Pairing](/channels/pairing)
 
+If a shared model catalog worker exits and its automatic runtime replacement fails,
+opening the model picker, preparing a chat, or sending a new message can check the
+failed runtime again without restarting the Gateway. The picker shows **Loading
+models…** while checking, then returns to **Models unavailable** if preparation
+still fails. Repeated foreground checks have a short cooldown. Cron and Heartbeat
+get one check per failure episode; later scheduled runs do not keep rebuilding a
+runtime that remains unavailable. Existing messages and tasks are not replayed.
+
+This recovery still waits for earlier preparation work to settle. A preparation
+that never finishes, unrelated configuration errors, and Gateway shutdown require
+their own diagnosis; a model check does not bypass those lifecycle boundaries.
+
 ## Dashboard control UI connectivity
 
-When the dashboard/control UI will not connect, validate URL, auth mode, and secure context assumptions.
+When the dashboard/control UI will not connect, validate its URL, authentication, and device identity.
 
 ```bash
 openclaw gateway status
@@ -67,9 +99,9 @@ openclaw gateway status --json
 
 Look for:
 
-- Correct probe URL and dashboard URL.
+- Correct check URL and dashboard URL.
 - Auth mode/token mismatch between client and gateway.
-- HTTP usage where device identity is required.
+- Clients that connect without the required device identity. The current Control UI can create and sign identity over plain HTTP; see [Insecure HTTP](/web/control-ui#insecure-http).
 
 If a local browser cannot connect to `127.0.0.1:18789` after an update, first recover the local Gateway service and confirm it is serving the dashboard:
 
@@ -83,8 +115,8 @@ If `curl` returns OpenClaw HTML, the Gateway is working and the remaining issue 
 
 <AccordionGroup>
   <Accordion title="Connect / auth signatures">
-    - `device identity required` → non-secure context or missing device auth.
-    - `origin not allowed` → browser `Origin` is not in `gateway.controlUi.allowedOrigins` (or you are connecting from a non-loopback browser origin without an explicit allowlist).
+    - `device identity required` → the client did not provide the identity required by its role and auth policy. Plain HTTP alone is not the cause. In token/password mode, the Control UI still requires browser device identity; the shared secret does not replace it.
+    - `origin not allowed` → the browser `Origin` is not allowed and is not a private same-origin load. Private same-origin loads, including private LAN/Tailscale addresses and `.local` or `.ts.net` hosts, do not need an allowlist entry. Public or cross-origin browser deployments need an entry in `gateway.controlUi.allowedOrigins`.
     - `device nonce required` / `device nonce mismatch` → client is not completing the challenge-based device auth flow (`connect.challenge` + `device.nonce`).
     - `device signature invalid` / `device signature expired` → client signed the wrong payload (or stale timestamp) for the current handshake.
     - `AUTH_TOKEN_MISMATCH` with `canRetryWithDeviceToken=true` → client can do one trusted retry with cached device token.
@@ -146,6 +178,7 @@ Related:
 
 - [Configuration](/gateway/configuration) (gateway auth modes)
 - [Control UI](/web/control-ui)
+- [Gateway protocol auth](/gateway/protocol/auth) — the wire contract behind `AUTH_TOKEN_MISMATCH` and `AUTH_SCOPE_MISMATCH`
 - [Devices](/cli/devices)
 - [Remote access](/gateway/remote)
 - [Trusted proxy auth](/gateway/trusted-proxy-auth)

@@ -1,27 +1,16 @@
 import path from "node:path";
-import { afterAll, expect, it } from "vitest";
+import { expect, it } from "vitest";
 import { loadSessionEntry, replaceSessionEntry } from "../../config/sessions/session-accessor.js";
 import type { SessionEntry } from "../../config/sessions/types.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import { OpenClawSchema } from "../../config/zod-schema.js";
 import { applyModelOverrideWithAuthProfileCompatibility } from "../../sessions/auth-profile-preservation.js";
 import { withOpenClawTestState } from "../../test-utils/openclaw-test-state.js";
-import { resolveModelWithRegistry } from "../embedded-agent-runner/model.registry-resolution.js";
-import { AuthStorage } from "../sessions/auth-storage.js";
-import { ModelRegistry } from "../sessions/model-registry.js";
+import {
+  createEmptyAgentDiscoveryStores,
+  resolveModelAsync,
+} from "../embedded-agent-runner/model.js";
 import { resolveSessionAuthSelection } from "./session-override.js";
-
-const transportTestApiKey = "openclawOpenAIResponsesTransportTestApi";
-const transportTestApi = Object.getOwnPropertyDescriptor(globalThis, transportTestApiKey);
-
-afterAll(() => {
-  // Arcee's Jiti graph republishes this API with a different transport host than Vite's.
-  if (transportTestApi) {
-    Object.defineProperty(globalThis, transportTestApiKey, transportTestApi);
-  } else {
-    Reflect.deleteProperty(globalThis, transportTestApiKey);
-  }
-});
 
 it.each([
   {
@@ -124,13 +113,13 @@ it.each([
           },
           agentId,
         );
-        const model = resolveModelWithRegistry({
+        const { model } = await resolveModelAsync(
+          "arcee",
+          "trinity-large-thinking",
+          state.agentDir(agentId),
           cfg,
-          provider: "arcee",
-          modelId: "trinity-large-thinking",
-          agentDir: state.agentDir(agentId),
-          modelRegistry: ModelRegistry.inMemory(AuthStorage.inMemory()),
-        });
+          createEmptyAgentDiscoveryStores(),
+        );
         expect(model?.baseUrl).toBe(modelEndpoint);
 
         const sessionKey = `agent:${agentId}:endpoint-pin`;
@@ -149,6 +138,7 @@ it.each([
         };
         await replaceSessionEntry(scope, sessionEntry);
         const selection = await resolveSessionAuthSelection({
+          agentId,
           cfg,
           provider: "arcee",
           modelId: "trinity-large-thinking",

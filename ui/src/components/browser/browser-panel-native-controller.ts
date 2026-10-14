@@ -13,6 +13,7 @@ import {
   type BrowserInspectedNode,
   type BrowserPanelTab,
 } from "./browser-client.ts";
+import type { BrowserPanelInputController } from "./browser-panel-controller-input.ts";
 import { BrowserPanelNativePresentation } from "./browser-panel-native-presentation.ts";
 import type { BrowserPanelControllerHost } from "./browser-panel-operation-ownership.ts";
 import type { BrowserPanelPendingInput } from "./browser-panel-pending-input.ts";
@@ -39,10 +40,16 @@ type BrowserPanelNativeState = {
 interface BrowserPanelNativeHost extends BrowserPanelNativeState {
   readonly host: Pick<
     BrowserPanelControllerHost,
-    "isConnected" | "browserPanelIsOpen" | "renderRoot" | "updateComplete"
+    | "isConnected"
+    | "browserPanelIsOpen"
+    | "renderRoot"
+    | "updateComplete"
+    | "sessionKey"
+    | "fixedTab"
   >;
   readonly native: { readonly activeTab: NativeBrowserTab | undefined };
   readonly pendingInput: Pick<BrowserPanelPendingInput, "queueInspection">;
+  readonly input: Pick<BrowserPanelInputController, "paintOverlay">;
   setState<Key extends keyof BrowserPanelNativeState>(
     key: Key,
     value: BrowserPanelNativeState[Key],
@@ -51,19 +58,18 @@ interface BrowserPanelNativeHost extends BrowserPanelNativeState {
   syncUrlDraft(url: string): void;
   reportError(error: unknown): void;
   exitCaptureModes(): void;
-  paintOverlay(): void;
 }
 
 const presenters = new Set<BrowserPanelNativeController>();
 const popupScopes = new Map<string, string>();
 
-/** Window-owned native state is shared by every session's panel instance. */
+/** Project the native owner's retained tabs into this session's panel. */
 export class BrowserPanelNativeController {
   readonly presentation: BrowserPanelNativePresentation;
-  private nativeTabs: NativeBrowserTab[] = [];
+  private allNativeTabs: NativeBrowserTab[] = [];
   private unsubscribeState?: () => void;
-  private revision = -1;
   private pendingActivation: string | null = null;
+  private pendingCommand: NativeBrowserMessage | null = null;
   /** New-tab request whose address field should be cleared and focused once it is selected. */
   private pendingAddressFocus: string | null = null;
   private captureGeneration = 0;
@@ -71,6 +77,17 @@ export class BrowserPanelNativeController {
 
   constructor(private readonly controller: BrowserPanelNativeHost) {
     this.presentation = new BrowserPanelNativePresentation(controller);
+  }
+
+  private includesTab(tab: NativeBrowserTab): boolean {
+    return (
+      !this.controller.host.fixedTab &&
+      (tab.sessionKey === undefined || tab.sessionKey === this.controller.host.sessionKey)
+    );
+  }
+
+  private get nativeTabs(): NativeBrowserTab[] {
+    return this.allNativeTabs.filter((tab) => this.includesTab(tab));
   }
 
   get activeTab(): NativeBrowserTab | undefined {
@@ -86,7 +103,6 @@ export class BrowserPanelNativeController {
       return;
     }
     presenters.add(this);
-    this.revision = -1;
     const initial = readNativeBrowserState();
     if (initial) {
       this.acceptState(initial, false);
@@ -102,7 +118,7 @@ export class BrowserPanelNativeController {
     this.unsubscribeState();
     this.unsubscribeState = undefined;
     presenters.delete(this);
-    this.pendingActivation = null;
+    this.cancelPendingActivation();
     this.cancelCapture();
     this.presentation.disconnect();
   }
@@ -112,13 +128,9 @@ export class BrowserPanelNativeController {
   }
 
   private acceptState(state: NativeBrowserState, activatePopups: boolean): void {
-    if (state.revision <= this.revision) {
-      return;
-    }
     const previous = new Set(this.nativeTabs.map((tab) => tab.id));
     const activeBefore = this.activeTab;
-    this.revision = state.revision;
-    this.nativeTabs = state.tabs;
+    this.allNativeTabs = state.tabs;
     this.controller.setState("tabs", this.mergeRemoteTabs(this.controller.tabs));
     const view = this.controller.view;
     if (
@@ -133,7 +145,7 @@ export class BrowserPanelNativeController {
         popupScopes.delete(id);
       }
     }
-    for (const tab of state.tabs) {
+    for (const tab of this.nativeTabs) {
       if (tab.id === this.pendingActivation) {
         this.pendingActivation = null;
         void this.controller.selectTab(tab.id).then(() => {
@@ -143,14 +155,13 @@ export class BrowserPanelNativeController {
         });
       } else if (activatePopups && tab.openedBy === "native" && !previous.has(tab.id)) {
         if (!popupScopes.has(tab.id)) {
-          const eligible = [...presenters];
+          const eligible = [...presenters]
+            .filter((presenter) => presenter.includesTab(tab))
+            .toSorted((a, b) => b.presentation.lastPresented - a.presentation.lastPresented);
           const owner =
-            eligible
-              .filter((presenter) => presenter.presentation.presentedTabId === tab.openerTabId)
-              .toSorted((a, b) => b.presentation.lastPresented - a.presentation.lastPresented)[0] ??
-            eligible
-              .filter((presenter) => presenter.presentation.lastPresented > 0)
-              .toSorted((a, b) => b.presentation.lastPresented - a.presentation.lastPresented)[0];
+            eligible.find(
+              (presenter) => presenter.presentation.presentedTabId === tab.openerTabId,
+            ) ?? eligible.find((presenter) => presenter.presentation.lastPresented > 0);
           if (owner) {
             popupScopes.set(tab.id, owner.presentation.scope);
           }
@@ -186,7 +197,24 @@ export class BrowserPanelNativeController {
   }
 
   async send(request: NativeBrowserMessage): Promise<boolean> {
+    const sessionKey = this.controller.host.sessionKey;
+    const activeTargetId = this.controller.activeTargetId;
+    const generation = this.captureGeneration;
+    this.pendingCommand = request;
     const reply = await postNativeBrowserMessage(request);
+    if (this.pendingCommand !== request) {
+      return false;
+    }
+    this.pendingCommand = null;
+    if (
+      this.captureGeneration !== generation ||
+      !this.controller.host.isConnected ||
+      !this.controller.host.browserPanelIsOpen() ||
+      this.controller.host.sessionKey !== sessionKey ||
+      this.controller.activeTargetId !== activeTargetId
+    ) {
+      return false;
+    }
     if (reply && !reply.ok) {
       this.controller.reportError(reply.error);
     }
@@ -199,6 +227,7 @@ export class BrowserPanelNativeController {
    */
   cancelPendingActivation(selectedTabId?: string): void {
     this.pendingActivation = null;
+    this.pendingCommand = null;
     if (this.pendingAddressFocus !== selectedTabId) {
       this.pendingAddressFocus = null;
     }
@@ -217,10 +246,17 @@ export class BrowserPanelNativeController {
       this.controller.exitCaptureModes();
       return (await this.send({ type: "navigate", tabId, url })) ? tabId : null;
     }
+    this.cancelPendingActivation();
     const tabId = `mac-${generateUUID()}`;
     this.pendingActivation = tabId;
     this.pendingAddressFocus = focusAddress ? tabId : null;
-    const reply = await postNativeBrowserMessage({ type: "open", tabId, url, activate: true });
+    const reply = await postNativeBrowserMessage({
+      type: "open",
+      tabId,
+      url,
+      sessionKey: this.controller.host.sessionKey,
+      activate: true,
+    });
     if (this.pendingActivation !== tabId) {
       return null;
     }
@@ -370,7 +406,7 @@ export class BrowserPanelNativeController {
           this.controller.reportError(reply.error);
         } else if (reply?.ok && "node" in reply) {
           this.controller.setState("inspected", readBrowserInspectedNode(reply.node));
-          this.controller.paintOverlay();
+          this.controller.input.paintOverlay();
         }
       });
     });
