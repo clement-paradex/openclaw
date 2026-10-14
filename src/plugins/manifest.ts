@@ -255,6 +255,7 @@ export function loadPluginManifest(
       channels,
     ),
     providers,
+    ...(raw.managesOwnAvailability === true ? { managesOwnAvailability: true } : {}),
     providerCatalogEntry: normalizeOptionalString(raw.providerCatalogEntry),
     capabilityCatalogEntry:
       raw.capabilityCatalogEntry === undefined
