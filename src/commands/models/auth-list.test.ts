@@ -10,6 +10,7 @@ import { withPluginMetadataSnapshotScope } from "../../plugins/current-plugin-me
 import { createPluginMetadataSnapshotFixture } from "../../plugins/plugin-metadata.test-support.js";
 import type { OutputRuntimeEnv } from "../../runtime.js";
 import { modelsAuthListCommand } from "./auth-list.js";
+import { listUnavailableAuthProfiles } from "./auth-unavailability.js";
 
 const mocks = vi.hoisted(() => ({
   ensureAuthProfileStore: vi.fn(),
@@ -125,7 +126,12 @@ describe("modelsAuthListCommand", () => {
       const disabled = reason === "auth_permanent" || reason === "billing";
       const bypassed = reason === "rate_limit" || reason === "overloaded";
       const window = disabled
-        ? { disabledUntil: 1_900_000_100_000, disabledReason: reason }
+        ? {
+            cooldownUntil: 1_900_003_100_000,
+            cooldownReason: "rate_limit" as const,
+            disabledUntil: 1_900_000_100_000,
+            disabledReason: reason,
+          }
         : { cooldownUntil: 1_900_000_100_000, cooldownReason: reason };
       mocks.ensureAuthProfileStore.mockReturnValue({
         version: 1,
@@ -139,6 +145,16 @@ describe("modelsAuthListCommand", () => {
         async () => {
           await modelsAuthListCommand({ json: true }, jsonRuntime);
           await modelsAuthListCommand({}, textRuntime);
+          if (disabled) {
+            expect(listUnavailableAuthProfiles(mocks.ensureAuthProfileStore())).toEqual([
+              expect.objectContaining({
+                profileId: "my-gateway:manual",
+                kind: "disabled",
+                reason,
+                until: 1_900_000_100_000,
+              }),
+            ]);
+          }
         },
         { trustConfigIdentity: true },
       );
@@ -159,6 +175,12 @@ describe("modelsAuthListCommand", () => {
           profiles: [{ ...identity, [disabled ? "disabledReason" : "cooldownReason"]: reason }],
         });
         expect(textRuntime.logs.at(-1)).toContain((disabled ? "disabled:" : "cooldown:") + reason);
+        if (disabled) {
+          expect(jsonRuntime.jsonPayloads[0]).not.toMatchObject({
+            profiles: [expect.objectContaining({ cooldownUntil: expect.anything() })],
+          });
+          expect(textRuntime.logs.at(-1)).not.toContain("cooldown");
+        }
       }
     },
   );
